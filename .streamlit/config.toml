@@ -1,0 +1,15 @@
+[theme]
+# A cor primária (Substitui o vermelho do Streamlit em botões, sliders e seleções)
+primaryColor = "#0056b3"
+
+# Fundo geral da página (Off-white corporativo para não cansar a vista)
+backgroundColor = "#F4F7FA"
+
+# Fundo dos painéis e caixas de input (Branco absoluto)
+secondaryBackgroundColor = "#FFFFFF"
+
+# Cor principal dos textos (Azul Marinho)
+textColor = "#00305eff"
+
+# Fonte padrão do sistema
+font = "sans serif"
