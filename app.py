@@ -42,7 +42,7 @@ def get_alunos_por_curso(curso_alvo):
         df = d.merge(c, on='id_curso', how='left')
         df_curso = df[df['curso_nome'] == curso_alvo].copy()
         status_inativos = ['CANCELADO', 'CONCLUÍDO', 'FORMADO', 'TRANCADO', 'FORMANDO']
-        df_curso = df_curso[~df_curso['status_discente'].isin(status_inativos)].copy().head(75)
+        df_curso = df_curso[~df_curso['status_discente'].isin(status_inativos)].copy()
         np.random.seed(42)
         r = []
         for _, row in df_curso.iterrows():
@@ -174,8 +174,49 @@ def render_inference():
                     time.sleep(0.3)
                 log_placeholder.empty()
                 st.toast("Inferência Neural Concluída!", )
-                if reprov < 2 and frequencia >= 75: st.balloons()
-                score = 0.86 if (reprov >= 2 or frequencia < 75) else 0.14
+                
+                import pickle
+                score = 0.14
+                try:
+                    if os.path.exists('modelo_evasao.pkl'):
+                        with open('modelo_evasao.pkl', 'rb') as f:
+                            modelo_data = pickle.load(f)
+                        modelo = modelo_data['modelo']
+                        features = modelo_data['features']
+                        
+                        df_infer = pd.DataFrame(0, index=[0], columns=features)
+                        df_infer['idade_ingresso'] = idade
+                        df_infer['aprov_1o_sem'] = aprov
+                        df_infer['reprov_1o_sem'] = reprov
+                        df_infer['ingresso_recente'] = 1
+                        df_infer['ano_ingresso'] = datetime.now().year
+                        df_infer['periodo_ingresso'] = 1
+                        
+                        if renda in ["Vulnerável", "Baixa Renda"]:
+                            col_renda = 'faixa_renda_familiar_ate_1k'
+                            if col_renda in features: df_infer.loc[0, col_renda] = 1
+                        elif renda == "Média Renda":
+                            col_renda = 'faixa_renda_familiar_2k_4k'
+                            if col_renda in features: df_infer.loc[0, col_renda] = 1
+                        elif renda == "Alta Renda":
+                            col_renda = 'faixa_renda_familiar_8k_mais'
+                            if col_renda in features: df_infer.loc[0, col_renda] = 1
+                            
+                        # Mapeamento do curso
+                        c_df = pd.read_parquet('dados/cursos.parquet')[['id_curso', 'curso_nome']].drop_duplicates()
+                        id_curso_match = c_df[c_df['curso_nome'] == curso]['id_curso']
+                        if not id_curso_match.empty:
+                            id_c = id_curso_match.iloc[0]
+                            col_curso = f'id_curso_{id_c}'
+                            if col_curso in features:
+                                df_infer.loc[0, col_curso] = 1
+                                
+                        score = float(modelo.predict_proba(df_infer)[0][1])
+                except Exception as e:
+                    score = 0.86 if (reprov >= 2 or frequencia < 75) else 0.14
+                
+                if score < 0.5: st.balloons()
+                
                 score_format, status = int(score * 100), "CRÍTICO" if score > 0.5 else "SEGURO"
                 st.session_state['history'].append({"Data": datetime.now().strftime("%H:%M:%S"), "Matrícula": matricula if matricula else "N/A", "Curso": curso, "Score": f"{score_format}%", "Status": status})
                 st.markdown(f"""<div class="kpi-container"><div class="kpi-box"><div class="kpi-title">Probabilidade Atuarial</div><div class="kpi-value">{score_format}%</div><div class="kpi-sub">Risco Calibrado</div></div><div class="kpi-box"><div class="kpi-title">Veredito MLOps</div><div class="kpi-value" style="color: {'#EF4444' if score>0.5 else '#10B981'};">{status}</div><div class="kpi-sub">Recall-Optimized</div></div></div>""", unsafe_allow_html=True)
