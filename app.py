@@ -36,7 +36,7 @@ def get_cursos_stats():
     except Exception: return pd.DataFrame()
 
 @st.cache_data(show_spinner="Carregando Base de Matrículas...")
-def get_alunos_por_curso(curso_alvo):
+def get_alunos_por_curso_v2(curso_alvo):
     try:
         d, c = pd.read_parquet('dados/discentes.parquet'), pd.read_parquet('dados/cursos.parquet')[['id_curso', 'curso_nome']].drop_duplicates()
         df = d.merge(c, on='id_curso', how='left')
@@ -183,6 +183,7 @@ def render_inference():
                             modelo_data = pickle.load(f)
                         modelo = modelo_data['modelo']
                         features = modelo_data['features']
+                        threshold_otimizado = modelo_data.get('threshold', 0.5)
                         
                         df_infer = pd.DataFrame(0, index=[0], columns=features)
                         df_infer['idade_ingresso'] = idade
@@ -213,11 +214,15 @@ def render_inference():
                                 
                         score = float(modelo.predict_proba(df_infer)[0][1])
                 except Exception as e:
+                    import traceback
+                    tb_str = traceback.format_exc()
+                    st.error(f"Erro interno de ML: {str(e)} \n\n {tb_str}")
                     score = 0.86 if (reprov >= 2 or frequencia < 75) else 0.14
+                    threshold_otimizado = 0.5
                 
-                if score < 0.5: st.balloons()
+                if score < threshold_otimizado: st.balloons()
                 
-                score_format, status = int(score * 100), "CRÍTICO" if score > 0.5 else "SEGURO"
+                score_format, status = int(score * 100), "CRÍTICO" if score >= threshold_otimizado else "SEGURO"
                 st.session_state['history'].append({"Data": datetime.now().strftime("%H:%M:%S"), "Matrícula": matricula if matricula else "N/A", "Curso": curso, "Score": f"{score_format}%", "Status": status})
                 st.markdown(f"""<div class="kpi-container"><div class="kpi-box"><div class="kpi-title">Probabilidade Atuarial</div><div class="kpi-value">{score_format}%</div><div class="kpi-sub">Risco Calibrado</div></div><div class="kpi-box"><div class="kpi-title">Veredito MLOps</div><div class="kpi-value" style="color: {'#EF4444' if score>0.5 else '#10B981'};">{status}</div><div class="kpi-sub">Recall-Optimized</div></div></div>""", unsafe_allow_html=True)
                 c_gauge, c_3d = st.columns([1, 1.5])
@@ -294,7 +299,7 @@ def render_eda():
         st.markdown(f"""<div class="kpi-box" style="border-top-color: {cor}; max-width: 450px; margin-bottom: 2rem;"><div class="kpi-title" title="{nome_original}">Raio-X: {nome_limpo}</div><div class="kpi-value">{evasao:.1f}%</div><div class="kpi-sub">{int(vol)} Alunos | Média: {media:.1f}</div><div style="margin-top: 1rem; display: inline-block; padding: 4px 12px; background: {cor}1A; color: {cor}; font-weight: 700;">Status: {stat}</div></div>""", unsafe_allow_html=True)
         st.markdown("<hr style='border-color: rgba(0,34,68,0.05); margin: 2rem 0;'><h4 style='font-size: 1.1rem; color:#00305E;'>Painel de Ação CRM por Discente</h4>", unsafe_allow_html=True)
         
-        df_alunos = get_alunos_por_curso(nome_original)
+        df_alunos = get_alunos_por_curso_v2(nome_original)
         if not df_alunos.empty:
             f1, f2, f3 = st.columns([1.5, 2, 1])
             busca = f1.text_input("Buscar Matrícula:", placeholder="Ex: 4801")
