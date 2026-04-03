@@ -178,8 +178,8 @@ def render_inference():
                 import pickle
                 score = 0.14
                 try:
-                    if os.path.exists('modelo_evasao.pkl'):
-                        with open('modelo_evasao.pkl', 'rb') as f:
+                    if os.path.exists('modelo_evasao_ufpb.pkl'):
+                        with open('modelo_evasao_ufpb.pkl', 'rb') as f:
                             modelo_data = pickle.load(f)
                         modelo = modelo_data['modelo']
                         features = modelo_data['features']
