@@ -8,7 +8,7 @@ import os
 from streamlit_option_menu import option_menu
 import base64
 
-# NOVOS IMPORTS PARA ENVIO REAL DE E-MAIL
+# IMPORTS PARA ENVIO REAL DE E-MAIL
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -62,7 +62,7 @@ def get_alunos_por_curso_v2(curso_alvo):
             risco = min(risco + np.random.uniform(0.00, 0.12), 0.99)
             if row['status_discente'] == 'CANCELADO': risco, motivo = max(risco, 0.85), "Evasão Consolidada"
             
-            # EMAIL ALTERADO AQUI PARA O SEU DE TESTE
+            # EMAIL DE TESTE SETADO PARA O SEU
             r.append({"Matrícula Anonimizada": f"***{str(row['id_discente'])[-4:]}", "Probabilidade Evasão (%)": round(risco * 100, 1), "Média Geral (Histórico)": round(media, 2), "Maior Ofensor / Problema Identificado": motivo, "E-mail Institucional": "kaio.victor@academico.ufpb.br", "Status Sistema": row['status_discente']})
         return pd.DataFrame(r).sort_values("Probabilidade Evasão (%)", ascending=False)
     except Exception: return pd.DataFrame()
@@ -253,7 +253,7 @@ def render_inference():
                     st.plotly_chart(fig_3d, use_container_width=True, config={'displayModeBar': False})
                     st.markdown('</div>', unsafe_allow_html=True)
                 
-                # NOVO: BLOCO PRESCRITIVO EXPLAINABLE AI
+                # BLOCO PRESCRITIVO EXPLAINABLE AI
                 st.markdown("<hr style='border-color: rgba(0,34,68,0.05); margin: 2rem 0;'><h3 style='color: #00305E; font-size: 1.3rem; margin-bottom: 1rem;'>Diagnóstico Prescritivo (Recomendação Estratégica XAI)</h3>", unsafe_allow_html=True)
                 st.markdown('<div class="sebtt-card" style="padding: 1.5rem; background-color: #F8FAFC; border-left: 4px solid #0056b3;">', unsafe_allow_html=True)
                 
@@ -331,40 +331,65 @@ def render_eda():
                         if linhas_selecionadas.empty:
                             st.warning("Selecione a caixa 'Protocolo Institucional' de pelo menos um aluno para despachar e-mails.")
                         else:
-                            emails_alvo = linhas_selecionadas["E-mail Institucional"].tolist()
-                            with st.spinner("Conectando ao gateway SMTP e disparando relatórios analíticos em anexo..."):
+                            with st.spinner("Personalizando mensagens e disparando via SMTP..."):
                                 try:
-                                    # --- INÍCIO DA LÓGICA DE ENVIO REAL (SMTP) ---
                                     smtp_server = "smtp.gmail.com"
                                     smtp_port = 587
-                                    
                                     remetente = st.secrets.get("EMAIL_USER", "")
                                     senha_app = st.secrets.get("EMAIL_PASS", "")
 
                                     if not remetente or not senha_app:
-                                        raise Exception("Credenciais de e-mail não configuradas no st.secrets.")
+                                        raise Exception("Credenciais de e-mail ausentes no st.secrets.")
 
                                     server = smtplib.SMTP(smtp_server, smtp_port)
                                     server.starttls()
                                     server.login(remetente, senha_app)
 
-                                    for email_dest in emails_alvo:
+                                    # LOOP PERSONALIZADO POR ALUNO
+                                    for _, aluno_row in linhas_selecionadas.iterrows():
+                                        email_dest = aluno_row["E-mail Institucional"]
+                                        problema = aluno_row["Maior Ofensor / Problema Identificado"]
+                                        matricula = aluno_row["Matrícula Anonimizada"]
+                                        
+                                        # Lógica de Personalização do Corpo do E-mail
+                                        if "Desempenho" in problema or "Notas" in problema:
+                                            texto_problema = "notamos uma variação importante no seu desempenho acadêmico recentemente."
+                                            texto_acao = "Gostaríamos de te convidar para uma conversa com a coordenação para organizarmos um plano de tutoria ou reforço acadêmico que possa te ajudar nas disciplinas."
+                                        elif "Vulnerabilidade" in problema or "Renda" in problema:
+                                            texto_problema = "identificamos que você possui gatilhos de atenção socioeconômica."
+                                            texto_acao = "Lembramos que a UFPB possui diversos auxílios de permanência. Recomendamos que procure a Assistência Social do campus para verificar sua elegibilidade aos editais da PRAE."
+                                        elif "Evasão" in problema:
+                                            texto_problema = "constatamos que seu vínculo com o curso apresenta um risco elevado de descontinuidade."
+                                            texto_acao = "Sua presença é fundamental para nós. Por favor, procure a coordenação para que possamos entender os motivos e buscar soluções para sua permanência."
+                                        else:
+                                            texto_problema = "nosso sistema de apoio ao discente identificou um ponto de atenção no seu perfil acadêmico."
+                                            texto_acao = "Estamos à disposição para conversar e garantir que você tenha todo o suporte necessário para concluir seu curso com sucesso."
+
                                         msg = MIMEMultipart()
                                         msg['From'] = remetente
                                         msg['To'] = email_dest
-                                        msg['Subject'] = "SEBTT 360° - Alerta de Risco Acadêmico"
+                                        msg['Subject'] = f"Apoio ao Discente - UFPB ({matricula})"
                                         
-                                        corpo = "Prezado(a),\n\nEste é um e-mail automático do sistema SEBTT 360° informando que o aluno requer protocolo de tutoria.\n\nAtenciosamente,\nSistema de Inteligência Cognitiva SEBTT."
+                                        corpo = f"""Olá, discente (Ref: {matricula}),
+
+Esperamos que esteja bem.
+
+Através do sistema de inteligência SEBTT 360°, {texto_problema}
+
+{texto_acao}
+
+Não hesite em nos procurar. Estamos aqui para apoiar sua jornada acadêmica na UFPB!
+
+Atenciosamente,
+Coordenação de Curso / Sistema SEBTT 360°"""
+
                                         msg.attach(MIMEText(corpo, 'plain'))
-                                        
                                         server.send_message(msg)
                                         
                                     server.quit()
-                                    # --- FIM DA LÓGICA DE ENVIO ---
-                                    
-                                    st.success(f"Relatório Executivo enviado para {len(emails_alvo)} e-mail(s) cadastrado(s)! Destinos: {', '.join(emails_alvo)}")
+                                    st.success(f"E-mails personalizados enviados com sucesso para {len(linhas_selecionadas)} alunos!")
                                 except Exception as e:
-                                    st.error(f"Erro ao conectar no SMTP: {str(e)}")
+                                    st.error(f"Erro no disparo: {str(e)}")
         else: st.info("Sem dados discentes ativos vinculados a este eixo.")
     st.markdown("</div>", unsafe_allow_html=True)
 
