@@ -8,11 +8,16 @@ import os
 from streamlit_option_menu import option_menu
 import base64
 
+# NOVOS IMPORTS PARA ENVIO REAL DE E-MAIL
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
 st.set_page_config(page_title="SEBTT 360°", page_icon="assets/logo.png", layout="wide", initial_sidebar_state="expanded")
 
 # Credenciais Locais de Acesso (Modificado sob demanda)
-ADMIN_USER = st.secrets["ADMIN_USER"]
-ADMIN_PASS = st.secrets["ADMIN_PASS"]
+ADMIN_USER = st.secrets.get("ADMIN_USER", "admin")
+ADMIN_PASS = st.secrets.get("ADMIN_PASS", "admin")
 
 def get_base64_image(image_path):
     if not os.path.exists(image_path): return None
@@ -56,7 +61,9 @@ def get_alunos_por_curso_v2(curso_alvo):
                 if "vulner" in renda or "baixa" in renda: risco += 0.20; motivo = "Atenção Socioeconômica Primária"
             risco = min(risco + np.random.uniform(0.00, 0.12), 0.99)
             if row['status_discente'] == 'CANCELADO': risco, motivo = max(risco, 0.85), "Evasão Consolidada"
-            r.append({"Matrícula Anonimizada": f"***{str(row['id_discente'])[-4:]}", "Probabilidade Evasão (%)": round(risco * 100, 1), "Média Geral (Histórico)": round(media, 2), "Maior Ofensor / Problema Identificado": motivo, "E-mail Institucional": "coordenacao.teste@ufpb.br", "Status Sistema": row['status_discente']})
+            
+            # EMAIL ALTERADO AQUI PARA O SEU DE TESTE
+            r.append({"Matrícula Anonimizada": f"***{str(row['id_discente'])[-4:]}", "Probabilidade Evasão (%)": round(risco * 100, 1), "Média Geral (Histórico)": round(media, 2), "Maior Ofensor / Problema Identificado": motivo, "E-mail Institucional": "kaio.victor@academico.ufpb.br", "Status Sistema": row['status_discente']})
         return pd.DataFrame(r).sort_values("Probabilidade Evasão (%)", ascending=False)
     except Exception: return pd.DataFrame()
 
@@ -326,8 +333,38 @@ def render_eda():
                         else:
                             emails_alvo = linhas_selecionadas["E-mail Institucional"].tolist()
                             with st.spinner("Conectando ao gateway SMTP e disparando relatórios analíticos em anexo..."):
-                                time.sleep(2.5)
-                            st.success(f"Relatório Executivo enviado para {len(emails_alvo)} e-mail(s) cadastrado(s)! Destinos: {', '.join(emails_alvo)}")
+                                try:
+                                    # --- INÍCIO DA LÓGICA DE ENVIO REAL (SMTP) ---
+                                    smtp_server = "smtp.gmail.com"
+                                    smtp_port = 587
+                                    
+                                    remetente = st.secrets.get("EMAIL_USER", "")
+                                    senha_app = st.secrets.get("EMAIL_PASS", "")
+
+                                    if not remetente or not senha_app:
+                                        raise Exception("Credenciais de e-mail não configuradas no st.secrets.")
+
+                                    server = smtplib.SMTP(smtp_server, smtp_port)
+                                    server.starttls()
+                                    server.login(remetente, senha_app)
+
+                                    for email_dest in emails_alvo:
+                                        msg = MIMEMultipart()
+                                        msg['From'] = remetente
+                                        msg['To'] = email_dest
+                                        msg['Subject'] = "SEBTT 360° - Alerta de Risco Acadêmico"
+                                        
+                                        corpo = "Prezado(a),\n\nEste é um e-mail automático do sistema SEBTT 360° informando que o aluno requer protocolo de tutoria.\n\nAtenciosamente,\nSistema de Inteligência Cognitiva SEBTT."
+                                        msg.attach(MIMEText(corpo, 'plain'))
+                                        
+                                        server.send_message(msg)
+                                        
+                                    server.quit()
+                                    # --- FIM DA LÓGICA DE ENVIO ---
+                                    
+                                    st.success(f"Relatório Executivo enviado para {len(emails_alvo)} e-mail(s) cadastrado(s)! Destinos: {', '.join(emails_alvo)}")
+                                except Exception as e:
+                                    st.error(f"Erro ao conectar no SMTP: {str(e)}")
         else: st.info("Sem dados discentes ativos vinculados a este eixo.")
     st.markdown("</div>", unsafe_allow_html=True)
 
